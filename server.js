@@ -307,9 +307,13 @@ function buildLeadTelegramMessage({
 }
 
 app.get("/", (_req, res) => {
+  const supabaseEnvError = validateSupabaseEnv();
+  const aiEnvError = validateEnv();
   res.json({
-    status: "ok",
-    message: "CREOLAB WhatsApp AI Sales Manager is running",
+    status: supabaseEnvError || aiEnvError ? "degraded" : "ok",
+    message: "CREOLAB website AI is running",
+    supabase: supabaseEnvError ? "missing" : "ok",
+    ai: aiEnvError ? "missing" : "ok",
   });
 });
 
@@ -864,10 +868,14 @@ app.post("/webhook", async (req, res) => {
 
 const supabaseEnvError = validateSupabaseEnv();
 if (supabaseEnvError) {
-  console.error(supabaseEnvError);
-  process.exit(1);
+  console.error(`[BOOT] ${supabaseEnvError}. Website chat will return 500 until this is set in Render Environment.`);
 }
 
-app.listen(PORT, () => {
-  console.log(`CREOLAB WhatsApp AI Sales Manager running on http://localhost:${PORT}`);
+const aiEnvError = validateEnv();
+if (aiEnvError) {
+  console.error(`[BOOT] ${aiEnvError}`);
+}
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`CREOLAB website AI running on port ${PORT}`);
 });
