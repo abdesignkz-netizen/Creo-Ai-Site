@@ -1,0 +1,6 @@
+.env
+node_modules/
+data/leads.json
+data/leads.json.tmp
+data/manager-session.json
+.DS_Store
