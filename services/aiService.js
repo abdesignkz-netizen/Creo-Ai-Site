@@ -321,6 +321,40 @@ export function buildAiInput({ knowledgeBase, history, message, lead, extraInstr
   ].join("\n");
 }
 
+function clientAskedPrice(message, history = []) {
+  const pattern = /сколько\s+стоит|цена|стоимость|от\s+скольк|поч(е|ё)м|прайс|тариф/i;
+  if (pattern.test(String(message || ""))) {
+    return true;
+  }
+  return (history || []).some(
+    (item) => item?.role === "user" && pattern.test(String(item.content || "")),
+  );
+}
+
+function stripUnsolicitedPrices(text) {
+  let cleaned = String(text || "");
+  cleaned = cleaned.replace(/[^.!?\n]*\d[\d\s]*\s*₸[^.!?\n]*/gi, "");
+  cleaned = cleaned.replace(/от\s+\d[\d\s]*/gi, "");
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+  cleaned = cleaned.replace(/^[,.\s-]+|[,.\s-]+$/g, "").trim();
+  return cleaned;
+}
+
+function polishWebsiteReply(reply, { message, history }) {
+  let text = String(reply || "").trim();
+
+  if (!clientAskedPrice(message, history)) {
+    const withoutPrice = stripUnsolicitedPrices(text);
+    if (withoutPrice.length >= 20) {
+      text = withoutPrice;
+    }
+  } else {
+    text = text.replace(/70\s*000\s*₸/gi, "100 000 ₸").replace(/\b70\s*000\b/g, "100 000");
+  }
+
+  return text;
+}
+
 export async function generateAiReply({
   message,
   history = [],
@@ -381,7 +415,11 @@ export async function generateAiReply({
     result = { ...FALLBACK_RESULT };
   }
 
-  const reply = result.reply || "Понял. Давайте уточним детали.";
+  let reply = result.reply || "Понял. Давайте уточним детали.";
+  if (channel === "web") {
+    reply = polishWebsiteReply(reply, { message: message.trim(), history });
+    result.reply = reply;
+  }
   const updatedHistory = [
     ...history,
     { role: "user", content: message.trim() },
