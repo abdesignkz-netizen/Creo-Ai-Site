@@ -268,6 +268,39 @@ async function sendTelegramDocument(file, caption = "") {
   return data;
 }
 
+function buildWebChatFollowupTelegramMessage({
+  name,
+  phone,
+  message,
+  managerNote,
+  managerEvent,
+  service,
+  pageUrl,
+}) {
+  const lines = [
+    "💬 Новое сообщение в чате CREOLAB",
+    "",
+    `Имя: ${name}`,
+    `Телефон: ${phone}`,
+  ];
+
+  if (service) lines.push(`Услуга: ${service}`);
+  lines.push("", "Запрос клиента:", message);
+
+  if (managerNote && managerNote !== message) {
+    lines.push("", `Кратко (ИИ): ${managerNote}`);
+  }
+  if (managerEvent && managerEvent !== "null") {
+    lines.push("", `Событие: ${managerEvent}`);
+  }
+
+  lines.push("");
+  if (pageUrl) lines.push(`Страница: ${pageUrl}`);
+  lines.push(`Время: ${formatAlmatyDateTime()}`);
+
+  return lines.join("\n").slice(0, 4000);
+}
+
 function buildLeadTelegramMessage({
   name,
   phone,
@@ -498,6 +531,26 @@ app.post("/api/web/chat", async (req, res) => {
         );
       } catch (notifyError) {
         console.error("WEB CHAT TELEGRAM ERROR:", notifyError.message);
+      }
+    } else if (knownPhone) {
+      const name = cleanText(result?.client_name, 120) || "не указано";
+      try {
+        await sendTelegramMessage(
+          buildWebChatFollowupTelegramMessage({
+            name,
+            phone: formatPhoneDisplay(knownPhone),
+            message,
+            managerNote: cleanText(
+              result?.manager_event_note || result?.summary,
+              500,
+            ),
+            managerEvent: cleanText(result?.manager_event, 80),
+            service: cleanText(result?.service, 80),
+            pageUrl: tracking.pageUrl || tracking.currentPage || "",
+          }),
+        );
+      } catch (notifyError) {
+        console.error("WEB CHAT FOLLOWUP TELEGRAM ERROR:", notifyError.message);
       }
     }
 
