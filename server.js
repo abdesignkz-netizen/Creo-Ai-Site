@@ -68,6 +68,10 @@ const pendingMessages = new Map();
 const recentIncomingIds = new Map();
 const MESSAGE_BUFFER_MS = Number(process.env.MESSAGE_BUFFER_MS || 4000);
 const FOLLOWUP_BUFFER_MS = Math.max(1500, Math.round(MESSAGE_BUFFER_MS / 2));
+const WEB_CHAT_FOLLOWUP_SILENCE_MS = Number(
+  process.env.WEB_CHAT_FOLLOWUP_SILENCE_MS || 60000,
+);
+const pendingWebChatFollowups = new Map();
 
 function validateEnv() {
   return validateAiEnv();
@@ -271,23 +275,31 @@ async function sendTelegramDocument(file, caption = "") {
 function buildWebChatFollowupTelegramMessage({
   name,
   phone,
-  message,
+  messages = [],
   managerNote,
   managerEvent,
   service,
   pageUrl,
 }) {
+  const clientLines = (messages || []).filter(Boolean);
   const lines = [
-    "💬 Новое сообщение в чате CREOLAB",
+    "📝 Обновление по заявке · CREOLAB",
     "",
     `Имя: ${name}`,
     `Телефон: ${phone}`,
   ];
 
   if (service) lines.push(`Услуга: ${service}`);
-  lines.push("", "Запрос клиента:", message);
+  lines.push("", "Обновлённые запросы клиента:");
+  if (clientLines.length > 1) {
+    lines.push(...clientLines.map((item) => `• ${item}`));
+  } else if (clientLines.length === 1) {
+    lines.push(clientLines[0]);
+  } else {
+    lines.push("—");
+  }
 
-  if (managerNote && managerNote !== message) {
+  if (managerNote && !clientLines.includes(managerNote)) {
     lines.push("", `Кратко (ИИ): ${managerNote}`);
   }
   if (managerEvent && managerEvent !== "null") {
@@ -299,6 +311,62 @@ function buildWebChatFollowupTelegramMessage({
   lines.push(`Время: ${formatAlmatyDateTime()}`);
 
   return lines.join("\n").slice(0, 4000);
+}
+
+function scheduleWebChatFollowupNotify(sessionId, payload) {
+  const existing = pendingWebChatFollowups.get(sessionId);
+  const merged = {
+    name: payload.name || existing?.name || "не указано",
+    phone: payload.phone || existing?.phone || "",
+    pageUrl: payload.pageUrl || existing?.pageUrl || "",
+    service: payload.service || existing?.service || "",
+    managerNote: payload.managerNote || existing?.managerNote || "",
+    managerEvent: payload.managerEvent || existing?.managerEvent || "",
+    messages: [...(existing?.messages || []), payload.message].filter(Boolean),
+    version: (existing?.version || 0) + 1,
+  };
+
+  if (existing?.timer) {
+    clearTimeout(existing.timer);
+  }
+
+  const version = merged.version;
+  const timer = setTimeout(() => {
+    flushWebChatFollowup(sessionId, version).catch((error) => {
+      console.error("WEB CHAT FOLLOWUP FLUSH ERROR:", error.message);
+    });
+  }, WEB_CHAT_FOLLOWUP_SILENCE_MS);
+
+  pendingWebChatFollowups.set(sessionId, { ...merged, timer });
+}
+
+async function flushWebChatFollowup(sessionId, expectedVersion) {
+  const pending = pendingWebChatFollowups.get(sessionId);
+  if (!pending || pending.version !== expectedVersion) {
+    return;
+  }
+
+  pendingWebChatFollowups.delete(sessionId);
+
+  if (!pending.messages.length || !pending.phone) {
+    return;
+  }
+
+  try {
+    await sendTelegramMessage(
+      buildWebChatFollowupTelegramMessage({
+        name: pending.name,
+        phone: pending.phone,
+        messages: pending.messages,
+        managerNote: pending.managerNote,
+        managerEvent: pending.managerEvent,
+        service: pending.service,
+        pageUrl: pending.pageUrl,
+      }),
+    );
+  } catch (notifyError) {
+    console.error("WEB CHAT FOLLOWUP TELEGRAM ERROR:", notifyError.message);
+  }
 }
 
 function buildLeadTelegramMessage({
@@ -533,25 +601,15 @@ app.post("/api/web/chat", async (req, res) => {
         console.error("WEB CHAT TELEGRAM ERROR:", notifyError.message);
       }
     } else if (knownPhone) {
-      const name = cleanText(result?.client_name, 120) || "не указано";
-      try {
-        await sendTelegramMessage(
-          buildWebChatFollowupTelegramMessage({
-            name,
-            phone: formatPhoneDisplay(knownPhone),
-            message,
-            managerNote: cleanText(
-              result?.manager_event_note || result?.summary,
-              500,
-            ),
-            managerEvent: cleanText(result?.manager_event, 80),
-            service: cleanText(result?.service, 80),
-            pageUrl: tracking.pageUrl || tracking.currentPage || "",
-          }),
-        );
-      } catch (notifyError) {
-        console.error("WEB CHAT FOLLOWUP TELEGRAM ERROR:", notifyError.message);
-      }
+      scheduleWebChatFollowupNotify(tracking.sessionId, {
+        name: cleanText(result?.client_name, 120) || "не указано",
+        phone: formatPhoneDisplay(knownPhone),
+        message,
+        managerNote: cleanText(result?.manager_event_note || result?.summary, 500),
+        managerEvent: cleanText(result?.manager_event, 80),
+        service: cleanText(result?.service, 80),
+        pageUrl: tracking.pageUrl || tracking.currentPage || "",
+      });
     }
 
     if (result?.llm_error) {
