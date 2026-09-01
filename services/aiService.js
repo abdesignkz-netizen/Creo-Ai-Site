@@ -349,7 +349,9 @@ function polishWebsiteReply(reply, { message, history }) {
       text = withoutPrice;
     }
   } else {
-    text = text.replace(/70\s*000\s*₸/gi, "100 000 ₸").replace(/\b70\s*000\b/g, "100 000");
+    text = text
+      .replace(/\b70[\s\u00a0]*000(?:\s*₸)?/gi, "100 000 ₸")
+      .replace(/\b70000\b/g, "100 000");
   }
 
   return text;
