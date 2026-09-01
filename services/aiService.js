@@ -338,6 +338,25 @@ function stripUnsolicitedPrices(text) {
   return cleaned;
 }
 
+function clientAsksAboutFiles(message) {
+  return /как\s+отправ|прикреп|загруз|логотип|фото|файл|документ|невозможно|скрепк/i.test(
+    String(message || ""),
+  );
+}
+
+function websiteFileGuidanceReply(history) {
+  const hasPhone = (history || []).some(
+    (item) =>
+      item?.role === "user" &&
+      /(?:\+?7|8)\s*[\d\s\-()]{9,}\d/.test(String(item.content || "")),
+  );
+  const base =
+    "В этом чате файлы не прикрепляются. Отправьте материалы через кнопку «Написать в WhatsApp» на сайте — менеджер их получит.";
+  return hasPhone
+    ? base
+    : `${base} Напишите, пожалуйста, как к вам обращаться и номер WhatsApp.`;
+}
+
 function stripOutboundPhoneNumbers(text) {
   let cleaned = String(text || "");
   cleaned = cleaned.replace(
@@ -350,6 +369,10 @@ function stripOutboundPhoneNumbers(text) {
 }
 
 function polishWebsiteReply(reply, { message, history }) {
+  if (clientAsksAboutFiles(message)) {
+    return websiteFileGuidanceReply(history);
+  }
+
   let text = String(reply || "").trim();
 
   if (!clientAskedPrice(message, history)) {
