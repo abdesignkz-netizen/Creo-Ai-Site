@@ -389,6 +389,13 @@ function polishWebsiteReply(reply, { message, history }) {
   return stripOutboundPhoneNumbers(text);
 }
 
+export function getWebsitePrefilledReply(message, history = []) {
+  if (!clientAsksAboutFiles(message)) {
+    return null;
+  }
+  return websiteFileGuidanceReply(history);
+}
+
 export async function generateAiReply({
   message,
   history = [],

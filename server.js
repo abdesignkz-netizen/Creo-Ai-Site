@@ -6,7 +6,7 @@ import { writeFile, unlink } from "fs/promises";
 import { createReadStream } from "fs";
 import os from "os";
 import { join } from "path";
-import { generateAiReply, getTranscriptionClient } from "./services/aiService.js";
+import { generateAiReply, getTranscriptionClient, getWebsitePrefilledReply } from "./services/aiService.js";
 import { validateAiEnv } from "./services/llmClient.js";
 import { handleClientMessage, buildClientMessageWithMedia } from "./services/clientService.js";
 import { handleFailedOutboundStatus, handleManagerMessage } from "./services/managerService.js";
@@ -554,6 +554,30 @@ app.post("/api/web/chat", async (req, res) => {
       role: "user",
       message,
     });
+
+    const prefilledReply = getWebsitePrefilledReply(message, history);
+    if (prefilledReply) {
+      await saveWebMessage({
+        sessionId: tracking.sessionId,
+        role: "assistant",
+        message: prefilledReply,
+      });
+
+      return res.json({
+        success: true,
+        sessionId: tracking.sessionId,
+        reply: prefilledReply,
+        result: {
+          reply: prefilledReply,
+          lead_status: knownPhone ? "qualified" : "warm",
+          service: "unknown",
+          handoff: Boolean(knownPhone),
+          brief_completed: Boolean(knownPhone),
+          summary: message,
+        },
+        latencyMs: 0,
+      });
+    }
 
     const { reply, result, latencyMs } = await generateAiReply({
       message,
