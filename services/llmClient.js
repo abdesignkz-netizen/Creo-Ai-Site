@@ -5,6 +5,12 @@ const ANYMODEL_DEFAULT_BASE_URL = "https://anymodel.org/v1";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_DEFAULT_MODEL = "qwen/qwen3-235b-a22b:free";
 const OPENAI_REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || "low";
+const LLM_TIMEOUT_MS = Number(
+  process.env.LLM_TIMEOUT_MS ||
+    process.env.ANYMODEL_TIMEOUT_MS ||
+    process.env.OPENROUTER_TIMEOUT_MS ||
+    50000,
+);
 
 const ALLOWED_PROVIDERS = new Set(["openai", "anymodel", "openrouter"]);
 
@@ -154,12 +160,15 @@ export function getOpenAIClient() {
       llmClient = new OpenAI({
         apiKey: process.env.ANYMODEL_API_KEY,
         baseURL: process.env.ANYMODEL_BASE_URL || ANYMODEL_DEFAULT_BASE_URL,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: 0,
       });
     } else if (provider === "openrouter") {
       llmClient = new OpenAI({
         apiKey: process.env.OPENROUTER_API_KEY,
         baseURL: OPENROUTER_BASE_URL,
-        timeout: Number(process.env.OPENROUTER_TIMEOUT_MS || 60000),
+        timeout: Number(process.env.OPENROUTER_TIMEOUT_MS || LLM_TIMEOUT_MS),
+        maxRetries: 0,
         defaultHeaders: {
           "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER || "https://creolab.kz",
           "X-Title": process.env.OPENROUTER_APP_TITLE || "CREOLAB AI Manager",
@@ -168,6 +177,8 @@ export function getOpenAIClient() {
     } else {
       llmClient = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: 0,
       });
     }
   }

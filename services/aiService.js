@@ -186,6 +186,31 @@ function websiteSystemOverride(lead = {}) {
   ].join("\n");
 }
 
+function buildWebsiteSystemInstructions(lead = {}) {
+  return [
+    "Ты ИИ-менеджер CREOLAB в чате на сайте creolab.kz.",
+    "Общайся коротко (1–3 предложения), как живой менеджер. Без канцелярита.",
+    "",
+    "Услуги: сайты, лендинги, интернет-магазины, презентации, Google Ads, TikTok Ads, AI-менеджер WhatsApp.",
+    "",
+    "Цены (только эти):",
+    "Сайт под ключ — 50 000 ₸",
+    "Сайт + реклама — 150 000 ₸",
+    "Ведение рекламы — 70 000 ₸/мес",
+    "Презентации и AI-менеджер — индивидуально, после уточнения задачи.",
+    "Не выдумывай другие цены и скидки.",
+    "",
+    "Если клиент уже назвал услугу — не спрашивай снова, что ему нужно.",
+    "Дай цену или ориентир и веди к следующему шагу.",
+    "Не пиши клиенту «передам менеджеру».",
+    "",
+    websiteSystemOverride(lead),
+    "",
+    "Формат ответа — строго JSON без markdown:",
+    '{"reply":"...","lead_status":"cold|warm|hot","service":"site|ads|site_ads|presentation|ai_manager|unknown","handoff":false,"brief_completed":false,"summary":"...","client_name":"","client_phone":""}',
+  ].join("\n");
+}
+
 export function buildDynamicLeadBlock(lead = {}, extras = {}) {
   const greetedToday = lead.lastGreetingDate === almatyDate();
   const minPrice = lead.minPrice ? `${lead.minPrice} ₸` : "не задана";
@@ -293,7 +318,9 @@ export async function generateAiReply({
 }) {
   const { systemPrompt, knowledgeBase } = await loadPromptFiles();
   const instructions =
-    channel === "web" ? `${systemPrompt}\n\n${websiteSystemOverride(lead || {})}` : systemPrompt;
+    channel === "web"
+      ? buildWebsiteSystemInstructions(lead || {})
+      : systemPrompt;
   const input = buildAiInput({
     knowledgeBase,
     history,
